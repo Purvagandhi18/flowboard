@@ -358,17 +358,20 @@ function FilterBar({ filters, setFilters, allTags }) {
 
       {/* Assignee filter */}
       <div style={{ display: 'flex', gap: 4 }}>
-        {USERS.map(u => (
+        {(allUsers || []).map(u => (
           <button key={u.id}
             onClick={() => setFilters(f => ({ ...f, assignee: f.assignee === u.id ? null : u.id }))}
             title={u.name}
             style={{
-              width: 26, height: 26, borderRadius: '50%', border: `2px solid ${filters.assignee === u.id ? u.color : BORDER}`,
-              background: u.color, color: WHITE, fontSize: 10, fontWeight: 700, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 28, height: 28, borderRadius: '50%', border: `2px solid ${filters.assignee === u.id ? (u.color || '#1B3557') : BORDER}`,
+              background: u.color || '#1B3557', color: WHITE, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, overflow: 'hidden',
               transform: filters.assignee === u.id ? 'scale(1.1)' : 'scale(1)', transition: 'all 0.12s',
             }}>
-            {initials(u.name)}
+            {u.picture
+              ? <img src={u.picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : initials(u.name)
+            }
           </button>
         ))}
       </div>
@@ -516,7 +519,7 @@ function SharedSection({ shares, cards, tasks, currentUser, openCard }) {
   )
 }
 
-export default function Dashboard({ state, setState, updateCard, addCard, addColumn, deleteCard, openCard, persistCards, currentUser, isManager }) {
+export default function Dashboard({ state, setState, updateCard, addCard, addColumn, deleteCard, openCard, persistCards, currentUser, isManager, allUsers }) {
   const [activeItem, setActiveItem] = useState(null)
   const [filters, setFilters] = useState({ priority: false, overdue: false, assignee: null })
 

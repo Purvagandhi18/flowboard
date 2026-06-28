@@ -45,6 +45,17 @@ export async function initSchema(sql) {
     )
   `
   await sql`
+    CREATE TABLE IF NOT EXISTS flowboard_users (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      picture TEXT,
+      role TEXT NOT NULL DEFAULT 'member',
+      color TEXT,
+      last_seen TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+  await sql`
     CREATE TABLE IF NOT EXISTS flowboard_mentions (
       id TEXT PRIMARY KEY,
       card_id TEXT NOT NULL,

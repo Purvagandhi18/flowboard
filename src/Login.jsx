@@ -63,6 +63,12 @@ export default function Login({ onLogin }) {
       return
     }
     localStorage.setItem('flowboard_session', JSON.stringify(session))
+    // Register user in DB so admin can see all team members
+    fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(session),
+    }).catch(() => {})
     onLogin(session)
   }
 

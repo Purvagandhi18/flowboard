@@ -120,14 +120,14 @@ const SIDE_ACTIVE_COLOR = '#818CF8'
 const SIDE_TEXT        = 'rgba(255,255,255,0.55)'
 const SIDE_BORDER      = 'rgba(255,255,255,0.08)'
 
-function Sidebar({ section, setSection, state, currentUser, setCurrentUserId, unreadMentions }) {
+function Sidebar({ section, setSection, state, currentUser, setCurrentUserId, unreadMentions, isAdmin, allUsers, viewAsUserId, setViewAsUserId }) {
   const reminderCount = (state.reminders || []).filter(r => r.status === 'active').length
   const priorityCount = (state.cards || []).filter(c => c.priorityFlag && !c.done).length
   const completedCount = (state.cards || []).filter(c => c.done).length
   const [expanded, setExpanded] = useState(false)
   const [hovNav, setHovNav] = useState(null)
   const [showUserSwitch, setShowUserSwitch] = useState(false)
-  const isManager = currentUser?.role === 'manager'
+  const [showBoardSwitch, setShowBoardSwitch] = useState(false)
 
   const W = expanded ? 220 : 60
 
@@ -203,10 +203,55 @@ function Sidebar({ section, setSection, state, currentUser, setCurrentUserId, un
         })}
       </nav>
 
-      {/* Role badge — only when expanded */}
-      {expanded && (
-        <div style={{ margin: '0 8px 8px', padding: '5px 10px', borderRadius: 7, background: isManager ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${SIDE_BORDER}`, fontSize: 10, fontWeight: 700, color: isManager ? SIDE_ACTIVE_COLOR : SIDE_TEXT, textAlign: 'center', letterSpacing: '0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {isManager ? 'MANAGER VIEW' : 'MEMBER VIEW'}
+      {/* Admin board-switcher — only when expanded and admin */}
+      {expanded && isAdmin && (
+        <div style={{ margin: '0 8px 6px', position: 'relative' }}>
+          <button onClick={() => setShowBoardSwitch(s => !s)} style={{
+            width: '100%', padding: '6px 10px', borderRadius: 7,
+            background: viewAsUserId ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.15)',
+            border: `1px solid ${SIDE_BORDER}`, fontSize: 10, fontWeight: 700,
+            color: SIDE_ACTIVE_COLOR, textAlign: 'left', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span>{viewAsUserId ? `Viewing: ${allUsers.find(u => u.id === viewAsUserId)?.name?.split(' ')[0] || '?'}` : 'ADMIN VIEW'}</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+          {showBoardSwitch && (
+            <div style={{
+              position: 'absolute', bottom: '110%', left: 0, right: 0,
+              background: '#1A2540', border: `1px solid ${SIDE_BORDER}`, borderRadius: 10,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)', overflow: 'hidden', maxHeight: 260, overflowY: 'auto',
+            }}>
+              <div style={{ padding: '7px 10px', fontSize: 10, fontWeight: 800, color: SIDE_TEXT, textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: `1px solid ${SIDE_BORDER}` }}>View board as</div>
+              <button onClick={() => { setViewAsUserId(null); setShowBoardSwitch(false) }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: 'none', background: !viewAsUserId ? 'rgba(99,102,241,0.2)' : 'transparent', cursor: 'pointer', textAlign: 'left', borderBottom: `1px solid ${SIDE_BORDER}` }}>
+                <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(99,102,241,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: SIDE_ACTIVE_COLOR, fontWeight: 700 }}>A</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: WHITE }}>My view (All cards)</div>
+                {!viewAsUserId && <div style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: SIDE_ACTIVE_COLOR }} />}
+              </button>
+              {allUsers.filter(u => u.id !== currentUser?.id).map(u => (
+                <button key={u.id} onClick={() => { setViewAsUserId(u.id); setShowBoardSwitch(false) }}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: 'none', background: viewAsUserId === u.id ? 'rgba(99,102,241,0.2)' : 'transparent', cursor: 'pointer', textAlign: 'left', borderBottom: `1px solid ${SIDE_BORDER}` }}>
+                  {u.picture
+                    ? <img src={u.picture} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                    : <div style={{ width: 24, height: 24, borderRadius: '50%', background: u.color || NAVY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: WHITE }}>{initials(u.name)}</div>
+                  }
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: WHITE, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
+                    <div style={{ fontSize: 9, color: SIDE_TEXT, textTransform: 'capitalize' }}>{u.role}</div>
+                  </div>
+                  {viewAsUserId === u.id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: SIDE_ACTIVE_COLOR, flexShrink: 0 }} />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Role badge — only when expanded, non-admin */}
+      {expanded && !isAdmin && (
+        <div style={{ margin: '0 8px 8px', padding: '5px 10px', borderRadius: 7, background: 'rgba(255,255,255,0.05)', border: `1px solid ${SIDE_BORDER}`, fontSize: 10, fontWeight: 700, color: SIDE_TEXT, textAlign: 'center', letterSpacing: '0.3px' }}>
+          MEMBER VIEW
         </div>
       )}
 
@@ -248,19 +293,32 @@ function Sidebar({ section, setSection, state, currentUser, setCurrentUserId, un
 // ── App shell ─────────────────────────────────────────────────────────────────
 function AppInner({ session, onSignOut }) {
   const [state, setState] = useState(EMPTY_STATE)
+  const [allUsers, setAllUsers] = useState([session])
   const [loading, setLoading] = useState(true)
   const [section, setSection] = useState('dashboard')
   const [openCardId, setOpenCardId] = useState(null)
   const [activeReminder, setActiveReminder] = useState(null)
   const [mentions, setMentions] = useState([])
+  // Admin can view any user's board
+  const [viewAsUserId, setViewAsUserId] = useState(null)
 
-  const currentUser = session
-  const currentUserId = session?.id
-  const isManager = session?.role === 'manager'
+  const isAdmin = session?.role === 'manager'
+  const currentUser = (isAdmin && viewAsUserId)
+    ? (allUsers.find(u => u.id === viewAsUserId) || session)
+    : session
+  const currentUserId = currentUser?.id
+  const isManager = isAdmin // keep prop name for compat
 
   function setCurrentUserId(val) {
     if (!val) onSignOut()
   }
+
+  // Fetch all registered users
+  useEffect(() => {
+    fetch('/api/users').then(r => r.json()).then(users => {
+      if (Array.isArray(users) && users.length > 0) setAllUsers(users)
+    }).catch(() => {})
+  }, [])
 
   // Load all data from Neon on mount
   useEffect(() => {
@@ -417,7 +475,7 @@ function AppInner({ session, onSignOut }) {
     cards.forEach(card => persist('/api/cards', 'POST', card))
   }, [])
 
-  const sharedProps = { state, setState, updateCard, updateTask, addCard, addTask, deleteCard, addColumn, openCard, persistCards, currentUser, isManager }
+  const sharedProps = { state, setState, updateCard, updateTask, addCard, addTask, deleteCard, addColumn, openCard, persistCards, currentUser, isManager, allUsers }
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: CREAM, flexDirection: 'column', gap: 12 }}>
@@ -430,7 +488,7 @@ function AppInner({ session, onSignOut }) {
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: CREAM, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,sans-serif' }}>
-      <Sidebar section={section} setSection={setSection} state={state} currentUser={currentUser} setCurrentUserId={setCurrentUserId} unreadMentions={unreadMentions} />
+      <Sidebar section={section} setSection={setSection} state={state} currentUser={session} setCurrentUserId={setCurrentUserId} unreadMentions={unreadMentions} isAdmin={isAdmin} allUsers={allUsers} viewAsUserId={viewAsUserId} setViewAsUserId={setViewAsUserId} />
 
       <main style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
         {section === 'dashboard'  && <Dashboard  {...sharedProps} />}
