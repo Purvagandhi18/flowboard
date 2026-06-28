@@ -457,6 +457,65 @@ function CompletedSection({ cards, columns, tasks, onRestore, onDelete, onOpen }
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
+function SharedSection({ shares, cards, tasks, currentUser, openCard }) {
+  const myShares = (shares || []).filter(s => s.user_id === currentUser?.id)
+  if (myShares.length === 0) return null
+
+  const sharedCards = myShares
+    .map(s => {
+      const card = cards.find(c => c.id === s.card_id)
+      if (!card) return null
+      const sharedByUser = USERS.find(u => u.id === s.shared_by)
+      return card ? { ...card, sharedByUser } : null
+    })
+    .filter(Boolean)
+
+  if (sharedCards.length === 0) return null
+
+  return (
+    <div style={{ margin: '0 24px 24px', borderRadius: 12, border: `1.5px solid #C7D7F5`, background: '#EEF3FF', overflow: 'hidden', flexShrink: 0 }}>
+      <div style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid #C7D7F5` }}>
+        <div style={{ width: 22, height: 22, borderRadius: '50%', background: NAVY, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>Shared with me</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#1B3557', background: '#C7D7F5', padding: '2px 8px', borderRadius: 20 }}>{sharedCards.length}</span>
+      </div>
+      <div style={{ padding: '12px 18px', display: 'flex', gap: 12, overflowX: 'auto', flexWrap: 'wrap' }}>
+        {sharedCards.map(card => {
+          const cardTasks = (tasks || []).filter(t => t.projectId === card.id)
+          const done = cardTasks.filter(t => t.status === 'done').length
+          return (
+            <div
+              key={card.id}
+              onClick={() => openCard(card.id)}
+              style={{ background: WHITE, borderRadius: 10, padding: '12px 14px', border: `1px solid #C7D7F5`, cursor: 'pointer', minWidth: 200, maxWidth: 260, flex: '0 0 auto', transition: 'box-shadow 0.15s', boxShadow: SH_SM }}
+              onMouseEnter={e => e.currentTarget.style.boxShadow = SH_MD}
+              onMouseLeave={e => e.currentTarget.style.boxShadow = SH_SM}
+            >
+              <div style={{ fontSize: 13, fontWeight: 700, color: T1, marginBottom: 8, lineHeight: 1.4 }}>{card.title}</div>
+              {cardTasks.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <div style={{ flex: 1, height: 3, background: '#E0E7FF', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.round((done / cardTasks.length) * 100)}%`, height: '100%', background: NAVY, borderRadius: 2 }} />
+                  </div>
+                  <span style={{ fontSize: 10, color: TM }}>{done}/{cardTasks.length}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', background: card.sharedByUser?.color || NAVY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 700, color: WHITE }}>
+                  {initials(card.sharedByUser?.name || '?')}
+                </div>
+                <span style={{ fontSize: 11, color: TM }}>from {card.sharedByUser?.name?.split(' ')[0] || 'someone'}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard({ state, setState, updateCard, addCard, addColumn, deleteCard, openCard, persistCards, currentUser, isManager }) {
   const [activeItem, setActiveItem] = useState(null)
   const [filters, setFilters] = useState({ priority: false, overdue: false, assignee: null })
@@ -611,6 +670,9 @@ export default function Dashboard({ state, setState, updateCard, addCard, addCol
 
         {/* Completed section */}
         {doneCards.length > 0 && <CompletedSection cards={doneCards} columns={state.columns} tasks={state.tasks || []} onRestore={updateCard} onDelete={deleteCard} onOpen={openCard} />}
+
+        {/* Shared with me */}
+        <SharedSection shares={state.shares} cards={state.cards} tasks={state.tasks || []} currentUser={currentUser} openCard={openCard} />
       </div>
 
     </div>

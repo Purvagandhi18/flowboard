@@ -93,6 +93,8 @@ export const IPaper    = ({ s=15 }) => <Svg size={s}><path d="M14 2H6a2 2 0 0 0-
 export const ISummary  = ({ s=18 }) => <Svg size={s}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h7M7 16h5"/></Svg>
 export const ISnooze   = ({ s=13 }) => <Svg size={s}><circle cx="12" cy="13" r="7"/><polyline points="12 10 12 13 14 15"/><path d="M5 5L2 8M22 8l-3-3M9 5h6"/></Svg>
 export const IInbox    = ({ s=15 }) => <Svg size={s}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></Svg>
+export const IMessage  = ({ s=16 }) => <Svg size={s}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></Svg>
+export const IShare    = ({ s=14 }) => <Svg size={s}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></Svg>
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 export const uid = () => Math.random().toString(36).slice(2, 10)

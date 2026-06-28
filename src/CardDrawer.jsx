@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   DndContext, closestCorners, useSensor, useSensors, PointerSensor, DragOverlay,
   useDroppable,
@@ -10,7 +10,7 @@ import {
   NAVY, WHITE, BORDER, T1, T2, TM, TL,
   SH_SM, SH_MD, SH_LG, tagColor, formatDate, isOverdue, initials, uid, now,
 } from './tokens.jsx'
-import { IPlus, IX, IChevD, IChevL, IStar, ICalendar, ITag, IGrip, ITrash, ICheck, ILink } from './tokens.jsx'
+import { IPlus, IX, IChevD, IChevL, IStar, ICalendar, ITag, IGrip, ITrash, ICheck, ILink, IShare } from './tokens.jsx'
 
 // ─── 3 subtask columns (On Hold removed) ─────────────────────────────────────
 const TASK_COLS = [
@@ -185,7 +185,7 @@ function KanbanCol({ col, tasks, onToggle, onSelect, onAdd }) {
 }
 
 // ─── Task detail panel (right side) ──────────────────────────────────────────
-function TaskDetailPanel({ task, updateTask, onBack }) {
+function TaskDetailPanel({ task, updateTask, onBack, card, currentUser }) {
   const [tab, setTab] = useState('comments')
   const [commentText, setCommentText] = useState('')
   const [showLinkInput, setShowLinkInput] = useState(false)
@@ -204,7 +204,31 @@ function TaskDetailPanel({ task, updateTask, onBack }) {
     const body = commentText.trim()
     if (!body) return
     updateTask(task.id, { comments: [...comments, { id: uid(), body, authorId: ME.id, createdAt: now() }] })
+    postMentions(body)
     setCommentText('')
+  }
+
+  function postMentions(text) {
+    if (!card || !currentUser) return
+    const mentioned = USERS.filter(u => {
+      const firstName = u.name.split(' ')[0]
+      return text.includes(`@${firstName}`) || text.includes(`@${u.name.replace(' ', '')}`)
+    })
+    for (const user of mentioned) {
+      if (user.id === currentUser.id) continue
+      fetch('/api/mentions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: uid(),
+          cardId: card.id,
+          cardTitle: card.title,
+          mentionedUserId: user.id,
+          mentionedByUserId: currentUser.id,
+          commentText: text,
+        }),
+      }).catch(() => {})
+    }
   }
 
   function postLink() {
@@ -326,14 +350,12 @@ function TaskDetailPanel({ task, updateTask, onBack }) {
                   </div>
                 </div>
               )}
-              <textarea
-                value={commentText} onChange={e => setCommentText(e.target.value)}
+              <MentionTextarea
+                value={commentText}
+                onChange={e => setCommentText(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) postComment() }}
-                placeholder="Ask for an update… (⌘↵ to send)"
-                rows={3}
+                placeholder="Ask for an update… (⌘↵ to send, type @ to mention)"
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${BORDER}`, fontSize: 12, outline: 'none', resize: 'none', fontFamily: 'inherit', lineHeight: 1.5, color: T1, boxSizing: 'border-box', background: WHITE, transition: 'border-color 0.12s' }}
-                onFocus={e => { e.currentTarget.style.borderColor = NAVY }}
-                onBlur={e => { e.currentTarget.style.borderColor = BORDER }}
               />
               <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                 <button
@@ -414,12 +436,153 @@ function MoveDropdown({ columns, currentColId, onMove, onClose }) {
   )
 }
 
+// ─── Share modal ──────────────────────────────────────────────────────────────
+function ShareModal({ cardId, shares, currentUser, onClose }) {
+  const cardShares = (shares || []).filter(s => s.card_id === cardId)
+  const sharedUserIds = new Set(cardShares.map(s => s.user_id))
+  const [selected, setSelected] = useState(new Set(sharedUserIds))
+  const [saving, setSaving] = useState(false)
+
+  const eligibleUsers = USERS.filter(u => u.id !== currentUser?.id)
+
+  async function handleSave() {
+    setSaving(true)
+    // Add new shares
+    const toAdd = [...selected].filter(id => !sharedUserIds.has(id))
+    // Remove unselected
+    const toRemove = [...sharedUserIds].filter(id => !selected.has(id))
+    if (toAdd.length > 0) {
+      await fetch('/api/shares', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardId, userIds: toAdd, sharedBy: currentUser?.id }),
+      }).catch(() => {})
+    }
+    for (const uid of toRemove) {
+      await fetch(`/api/shares?cardId=${cardId}&userId=${uid}`, { method: 'DELETE' }).catch(() => {})
+    }
+    setSaving(false)
+    onClose()
+  }
+
+  function toggle(userId) {
+    setSelected(s => {
+      const next = new Set(s)
+      if (next.has(userId)) next.delete(userId); else next.add(userId)
+      return next
+    })
+  }
+
+  return (
+    <>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onClick={onClose} />
+      <div style={{ position: 'absolute', top: '110%', right: 0, zIndex: 9999, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 16, boxShadow: SH_LG, minWidth: 240 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: T1, marginBottom: 12 }}>Share card with</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+          {eligibleUsers.map(u => (
+            <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 8px', borderRadius: 8, background: selected.has(u.id) ? '#EEF3FF' : 'transparent', transition: 'background 0.12s' }}>
+              <input
+                type="checkbox"
+                checked={selected.has(u.id)}
+                onChange={() => toggle(u.id)}
+                style={{ accentColor: NAVY, width: 14, height: 14 }}
+              />
+              <div style={{ width: 26, height: 26, borderRadius: '50%', background: u.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: WHITE, flexShrink: 0 }}>
+                {initials(u.name)}
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T1 }}>{u.name}</div>
+                <div style={{ fontSize: 10, color: TM, textTransform: 'capitalize' }}>{u.role}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          style={{ width: '100%', padding: '8px 0', borderRadius: 8, border: 'none', background: NAVY, color: WHITE, fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+          {saving ? 'Saving…' : 'Done'}
+        </button>
+      </div>
+    </>
+  )
+}
+
+// ─── @mention autocomplete ────────────────────────────────────────────────────
+function MentionTextarea({ value, onChange, onKeyDown, placeholder, style }) {
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [query, setQuery] = useState('')
+  const [atPos, setAtPos] = useState(-1)
+  const ref = useRef(null)
+
+  function handleChange(e) {
+    const val = e.target.value
+    onChange(e)
+    const cursor = e.target.selectionStart
+    // Find last @ before cursor
+    const before = val.slice(0, cursor)
+    const match = before.match(/@(\w*)$/)
+    if (match) {
+      setAtPos(cursor - match[0].length)
+      setQuery(match[1])
+      setShowDropdown(true)
+    } else {
+      setShowDropdown(false)
+    }
+  }
+
+  function selectUser(user) {
+    const val = ref.current.value
+    const before = val.slice(0, atPos)
+    const after = val.slice(atPos + query.length + 1) // +1 for @
+    const newVal = before + '@' + user.name.split(' ')[0] + ' ' + after
+    onChange({ target: { value: newVal } })
+    setShowDropdown(false)
+    ref.current.focus()
+  }
+
+  const filtered = USERS.filter(u => u.name.toLowerCase().startsWith(query.toLowerCase()) || u.name.split(' ')[0].toLowerCase().startsWith(query.toLowerCase()))
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={handleChange}
+        onKeyDown={e => {
+          if (e.key === 'Escape') setShowDropdown(false)
+          onKeyDown?.(e)
+        }}
+        onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+        placeholder={placeholder}
+        rows={3}
+        style={style}
+      />
+      {showDropdown && filtered.length > 0 && (
+        <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: SH_MD, overflow: 'hidden', zIndex: 100, marginBottom: 4 }}>
+          {filtered.map(u => (
+            <button key={u.id} onMouseDown={() => selectUser(u)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', borderBottom: `1px solid ${BORDER}` }}
+              onMouseEnter={e => e.currentTarget.style.background = '#F5F4F2'}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              <div style={{ width: 22, height: 22, borderRadius: '50%', background: u.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: WHITE }}>{initials(u.name)}</div>
+              <span style={{ fontSize: 12, fontWeight: 600, color: T1 }}>{u.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main modal ───────────────────────────────────────────────────────────────
-export default function CardDrawer({ cardId, state, updateCard, updateTask, addTask, deleteCard, onClose }) {
+export default function CardDrawer({ cardId, state, updateCard, updateTask, addTask, deleteCard, onClose, currentUser }) {
   const [mounted, setMounted] = useState(false)
   const [activeTaskId, setActiveTaskId] = useState(null)
   const [selectedTaskId, setSelectedTaskId] = useState(null)
   const [showMove, setShowMove] = useState(false)
+  const [showShare, setShowShare] = useState(false)
   const [showTagInput, setShowTagInput] = useState(false)
   const [tagDraft, setTagDraft] = useState('')
   const [titleEditing, setTitleEditing] = useState(false)
@@ -565,6 +728,14 @@ export default function CardDrawer({ cardId, state, updateCard, updateTask, addT
                 {showMove && <MoveDropdown columns={state.columns || []} currentColId={card.columnId} onMove={col => update({ columnId: col })} onClose={() => setShowMove(false)} />}
               </div>
 
+              <div style={{ position: 'relative' }}>
+                <button onClick={() => setShowShare(s => !s)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: showShare ? '#EEF3FF' : 'transparent', fontSize: 12, fontWeight: 700, color: showShare ? NAVY : TM, cursor: 'pointer' }}>
+                  <IShare s={13} /> Share
+                </button>
+                {showShare && <ShareModal cardId={cardId} shares={state.shares || []} currentUser={currentUser} onClose={() => setShowShare(false)} />}
+              </div>
+
               <button onClick={handleMarkDone}
                 style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: `1.5px solid #10B981`, background: '#F0FDF4', fontSize: 12, fontWeight: 700, color: '#065F46', cursor: 'pointer' }}>
                 <ICheck s={13} /> Mark done
@@ -670,6 +841,8 @@ export default function CardDrawer({ cardId, state, updateCard, updateTask, addT
                 task={selectedTask}
                 updateTask={updateTask}
                 onBack={() => setSelectedTaskId(null)}
+                card={card}
+                currentUser={currentUser}
               />
             ) : (
               <EmptyPanel />

@@ -22,6 +22,8 @@ export default async function handler(req, res) {
     if (req.method === 'DELETE') {
       const { id } = req.query
       await sql`DELETE FROM flowboard_cards WHERE id = ${id}`
+      await sql`DELETE FROM flowboard_shares WHERE card_id = ${id}`
+      await sql`DELETE FROM flowboard_mentions WHERE card_id = ${id}`
       return res.status(200).json({ ok: true })
     }
 

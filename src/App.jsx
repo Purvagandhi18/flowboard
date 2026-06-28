@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { USERS } from './data.js'
 import { NAVY, NAVY_BG, CREAM, WHITE, BORDER, T1, T2, TM, SH_MD, uid, now, initials } from './tokens.jsx'
 
-const EMPTY_STATE = { columns: [], cards: [], tasks: [], reminders: [] }
+const EMPTY_STATE = { columns: [], cards: [], tasks: [], reminders: [], shares: [] }
 
 async function apiFetch(path, opts = {}) {
   const res = await fetch(path, {
@@ -21,16 +21,18 @@ function persist(path, method, body) {
 function persistDelete(path) {
   fetch(path, { method: 'DELETE' }).catch(err => console.error('delete failed', err))
 }
-import { IBoard, IStar, IBell, IFlag, ISummary, ISettings, ILogout, ISearch, IZap, IX, ICheck } from './tokens.jsx'
+import { IBoard, IStar, IBell, IFlag, ISummary, ISettings, ILogout, ISearch, IZap, IX, ICheck, IMessage } from './tokens.jsx'
 import Dashboard from './Dashboard.jsx'
 import CardDrawer from './CardDrawer.jsx'
 import Reminders from './Reminders.jsx'
 import Priority from './Priority.jsx'
 import Summary from './Summary.jsx'
 import Completed from './Completed.jsx'
+import Threads from './Threads.jsx'
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard',      Icon: IBoard   },
+  { id: 'threads',   label: 'Threads',         Icon: IMessage },
   { id: 'priority',  label: 'Priority',        Icon: IFlag    },
   { id: 'completed', label: 'Completed',       Icon: ICheck   },
   { id: 'reminders', label: 'Reminders',       Icon: IBell    },
@@ -107,7 +109,7 @@ function ReminderPopup({ reminder, onDismiss, onSnooze }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-function Sidebar({ section, setSection, state, currentUser, setCurrentUserId }) {
+function Sidebar({ section, setSection, state, currentUser, setCurrentUserId, unreadMentions }) {
   const reminderCount = (state.reminders || []).filter(r => r.status === 'active').length
   const priorityCount = (state.cards || []).filter(c => c.priorityFlag && !c.done).length
   const completedCount = (state.cards || []).filter(c => c.done).length
@@ -145,7 +147,7 @@ function Sidebar({ section, setSection, state, currentUser, setCurrentUserId }) 
       <nav style={{ flex: 1, padding: '10px 10px 0', overflowY: 'auto' }}>
         {NAV.map(({ id, label, Icon }) => {
           const active = section === id
-          const badge = id === 'reminders' ? reminderCount : id === 'priority' ? priorityCount : id === 'completed' ? completedCount : 0
+          const badge = id === 'reminders' ? reminderCount : id === 'priority' ? priorityCount : id === 'completed' ? completedCount : id === 'threads' ? unreadMentions : 0
           return (
             <button
               key={id}
@@ -230,6 +232,7 @@ export default function App() {
   const [section, setSection] = useState('dashboard')
   const [openCardId, setOpenCardId] = useState(null)
   const [activeReminder, setActiveReminder] = useState(null)
+  const [mentions, setMentions] = useState([])
   const [currentUserId, setCurrentUserIdRaw] = useState(() => {
     return localStorage.getItem('flowboard_user') || 'u1'
   })
@@ -248,6 +251,32 @@ export default function App() {
       .then(data => { setState(data); setLoading(false) })
       .catch(err => { console.error('Failed to load state:', err); setLoading(false) })
   }, [])
+
+  // Poll board state every 3 seconds for real-time updates
+  useEffect(() => {
+    const poll = () => {
+      fetch('/api/state')
+        .then(r => r.json())
+        .then(data => setState(data))
+        .catch(() => {})
+    }
+    const iv = setInterval(poll, 3000)
+    return () => clearInterval(iv)
+  }, [])
+
+  // Poll mentions every 3 seconds
+  useEffect(() => {
+    if (!currentUser) return
+    const fetchMentions = () => {
+      fetch(`/api/mentions?userId=${currentUser.id}`)
+        .then(r => r.json())
+        .then(data => Array.isArray(data) ? setMentions(data) : null)
+        .catch(() => {})
+    }
+    fetchMentions()
+    const iv = setInterval(fetchMentions, 3000)
+    return () => clearInterval(iv)
+  }, [currentUser?.id])
 
   // Show reminder popup after 4s if there's an active one due today
   useEffect(() => {
@@ -352,6 +381,20 @@ export default function App() {
     setOpenCardId(id)
   }, [])
 
+  const shareCard = useCallback((cardId, userIds) => {
+    fetch('/api/shares', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cardId, userIds, sharedBy: currentUserId }),
+    }).catch(() => {})
+  }, [currentUserId])
+
+  const unshareCard = useCallback((cardId, userId) => {
+    fetch(`/api/shares?cardId=${cardId}&userId=${userId}`, { method: 'DELETE' }).catch(() => {})
+  }, [])
+
+  const unreadMentions = mentions.filter(m => !m.read_at).length
+
   // Called by Dashboard after same-column drag reorder
   const persistCards = useCallback((cards) => {
     cards.forEach(card => persist('/api/cards', 'POST', card))
@@ -370,10 +413,11 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: CREAM, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,sans-serif' }}>
-      <Sidebar section={section} setSection={setSection} state={state} currentUser={currentUser} setCurrentUserId={setCurrentUserId} />
+      <Sidebar section={section} setSection={setSection} state={state} currentUser={currentUser} setCurrentUserId={setCurrentUserId} unreadMentions={unreadMentions} />
 
       <main style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
         {section === 'dashboard'  && <Dashboard  {...sharedProps} />}
+        {section === 'threads'    && <Threads    currentUser={currentUser} openCard={openCard} />}
         {section === 'priority'   && <Priority   {...sharedProps} />}
         {section === 'completed'  && <Completed  {...sharedProps} />}
         {section === 'reminders'  && <Reminders  state={state} addReminder={addReminder} updateReminder={updateReminder} deleteReminder={deleteReminder} />}
@@ -389,6 +433,7 @@ export default function App() {
         addTask={addTask}
         deleteCard={deleteCard}
         onClose={() => setOpenCardId(null)}
+        currentUser={currentUser}
       />
 
       {/* Reminder popup */}

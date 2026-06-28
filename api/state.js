@@ -10,11 +10,12 @@ export default async function handler(req, res) {
     const sql = getDb()
     await initSchema(sql)
 
-    const [columns, cards, tasks, reminders] = await Promise.all([
+    const [columns, cards, tasks, reminders, shares] = await Promise.all([
       sql`SELECT id, title, accent, position FROM flowboard_columns ORDER BY position`,
       sql`SELECT data FROM flowboard_cards ORDER BY (data->>'createdAt') ASC`,
       sql`SELECT data FROM flowboard_tasks ORDER BY (data->>'createdAt') ASC`,
       sql`SELECT data FROM flowboard_reminders ORDER BY (data->>'createdAt') ASC`,
+      sql`SELECT card_id, user_id, shared_by FROM flowboard_shares`,
     ])
 
     res.status(200).json({
@@ -22,6 +23,7 @@ export default async function handler(req, res) {
       cards: cards.map(r => r.data),
       tasks: tasks.map(r => r.data),
       reminders: reminders.map(r => r.data),
+      shares,
     })
   } catch (e) {
     console.error(e)
