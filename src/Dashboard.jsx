@@ -327,7 +327,7 @@ function AddColumnBtn({ onAdd }) {
 }
 
 // ── Filter bar ────────────────────────────────────────────────────────────────
-function FilterBar({ filters, setFilters, allTags }) {
+function FilterBar({ filters, setFilters, allTags, allUsers }) {
   const [tagOpen, setTagOpen] = useState(false)
 
   return (
@@ -627,7 +627,7 @@ export default function Dashboard({ state, setState, updateCard, addCard, addCol
             {visibleCards.filter(c => !c.archivedAt && !c.done).length} active · {doneCards.length} completed
           </div>
         </div>
-        <FilterBar filters={filters} setFilters={setFilters} allTags={allTags} />
+        <FilterBar filters={filters} setFilters={setFilters} allTags={allTags} allUsers={allUsers} />
       </div>
 
       {/* Board + Completed — scrollable vertically */}
