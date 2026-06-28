@@ -246,10 +246,7 @@ function Sidebar({ section, setSection, state, currentUser, setCurrentUserId, un
 }
 
 // ── App shell ─────────────────────────────────────────────────────────────────
-function AppInner() {
-  const [session, setSession] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('flowboard_session')) } catch { return null }
-  })
+function AppInner({ session, onSignOut }) {
   const [state, setState] = useState(EMPTY_STATE)
   const [loading, setLoading] = useState(true)
   const [section, setSection] = useState('dashboard')
@@ -262,14 +259,7 @@ function AppInner() {
   const isManager = session?.role === 'manager'
 
   function setCurrentUserId(val) {
-    if (!val) {
-      localStorage.removeItem('flowboard_session')
-      setSession(null)
-    }
-  }
-
-  if (!session) {
-    return <Login onLogin={s => setSession(s)} />
+    if (!val) onSignOut()
   }
 
   // Load all data from Neon on mount
@@ -478,9 +468,21 @@ function AppInner() {
 }
 
 export default function App() {
+  const [session, setSession] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('flowboard_session')) } catch { return null }
+  })
+
+  function handleSignOut() {
+    localStorage.removeItem('flowboard_session')
+    setSession(null)
+  }
+
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <AppInner />
+      {session
+        ? <AppInner session={session} onSignOut={handleSignOut} />
+        : <Login onLogin={s => setSession(s)} />
+      }
     </GoogleOAuthProvider>
   )
 }
