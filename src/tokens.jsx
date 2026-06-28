@@ -102,13 +102,14 @@ export const now = () => new Date().toISOString()
 
 export function formatDate(iso) {
   if (!iso) return ''
-  const d = new Date(iso)
-  const today = new Date()
-  const diff = Math.floor((d - today) / 86400000)
-  if (diff === 0) return 'Today'
-  if (diff === 1) return 'Tomorrow'
-  if (diff === -1) return 'Yesterday'
-  return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+  const today = new Date().toISOString().slice(0, 10)
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+  const d = iso.slice(0, 10)
+  if (d === today) return 'Today'
+  if (d === tomorrow) return 'Tomorrow'
+  if (d === yesterday) return 'Yesterday'
+  return new Date(iso + 'T12:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
 }
 
 export function isOverdue(iso) {
