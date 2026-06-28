@@ -109,12 +109,12 @@ function ReminderPopup({ reminder, onDismiss, onSnooze }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-const SIDE_BG          = WHITE
-const SIDE_HOVER       = '#F5F4F2'
-const SIDE_ACTIVE      = NAVY_BG
-const SIDE_ACTIVE_COLOR = NAVY
-const SIDE_TEXT        = TM
-const SIDE_BORDER      = BORDER
+const SIDE_BG          = '#0F1729'
+const SIDE_HOVER       = 'rgba(255,255,255,0.07)'
+const SIDE_ACTIVE      = 'rgba(99,102,241,0.25)'
+const SIDE_ACTIVE_COLOR = '#818CF8'
+const SIDE_TEXT        = 'rgba(255,255,255,0.55)'
+const SIDE_BORDER      = 'rgba(255,255,255,0.08)'
 
 function Sidebar({ section, setSection, state, currentUser, setCurrentUserId, unreadMentions }) {
   const reminderCount = (state.reminders || []).filter(r => r.status === 'active').length
