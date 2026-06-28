@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { NAVY, WHITE, CREAM, BORDER, T1, T2, TM, initials } from './tokens.jsx'
-import { USERS } from './data.js'
 
 function timeAgo(ts) {
   const diff = Date.now() - new Date(ts).getTime()

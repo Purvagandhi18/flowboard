@@ -492,7 +492,7 @@ function AppInner({ session, onSignOut }) {
 
       <main style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
         {section === 'dashboard'  && <Dashboard  {...sharedProps} />}
-        {section === 'threads'    && <Threads    currentUser={currentUser} openCard={openCard} />}
+        {section === 'threads'    && <Threads    currentUser={currentUser} openCard={id => { setSection('dashboard'); openCard(id) }} />}
         {section === 'priority'   && <Priority   {...sharedProps} />}
         {section === 'completed'  && <Completed  {...sharedProps} />}
         {section === 'reminders'  && <Reminders  state={state} addReminder={addReminder} updateReminder={updateReminder} deleteReminder={deleteReminder} />}
@@ -509,6 +509,10 @@ function AppInner({ session, onSignOut }) {
         deleteCard={deleteCard}
         onClose={() => setOpenCardId(null)}
         currentUser={currentUser}
+        allUsers={allUsers}
+        shareCard={shareCard}
+        unshareCard={unshareCard}
+        setState={setState}
       />
 
       {/* Reminder popup */}

@@ -5,7 +5,6 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { USERS } from './data.js'
 import {
   NAVY, WHITE, BORDER, T1, T2, TM, TL,
   SH_SM, SH_MD, SH_LG, tagColor, formatDate, isOverdue, initials, uid, now,
@@ -20,8 +19,8 @@ const TASK_COLS = [
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function Av({ userId, size = 22 }) {
-  const u = USERS.find(u => u.id === userId)
+function Av({ userId, size = 22, allUsers = [] }) {
+  const u = allUsers.find(u => u.id === userId)
   if (!u) return null
   return (
     <div title={u.name} style={{ width: size, height: size, borderRadius: '50%', background: u.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.36, fontWeight: 700, color: WHITE, flexShrink: 0 }}>
@@ -185,7 +184,7 @@ function KanbanCol({ col, tasks, onToggle, onSelect, onAdd }) {
 }
 
 // ─── Task detail panel (right side) ──────────────────────────────────────────
-function TaskDetailPanel({ task, updateTask, onBack, card, currentUser }) {
+function TaskDetailPanel({ task, updateTask, onBack, card, currentUser, allUsers }) {
   const [tab, setTab] = useState('comments')
   const [commentText, setCommentText] = useState('')
   const [showLinkInput, setShowLinkInput] = useState(false)
@@ -198,19 +197,19 @@ function TaskDetailPanel({ task, updateTask, onBack, card, currentUser }) {
 
   const col = TASK_COLS.find(c => c.id === task.status)
   const comments = task.comments || []
-  const ME = USERS[0]
 
   function postComment() {
     const body = commentText.trim()
     if (!body) return
-    updateTask(task.id, { comments: [...comments, { id: uid(), body, authorId: ME.id, createdAt: now() }] })
+    updateTask(task.id, { comments: [...comments, { id: uid(), body, authorId: currentUser?.id, createdAt: now() }] })
     postMentions(body)
     setCommentText('')
   }
 
   function postMentions(text) {
     if (!card || !currentUser) return
-    const mentioned = USERS.filter(u => {
+    const users = allUsers || []
+    const mentioned = users.filter(u => {
       const firstName = u.name.split(' ')[0]
       return text.includes(`@${firstName}`) || text.includes(`@${u.name.replace(' ', '')}`)
     })
@@ -226,6 +225,8 @@ function TaskDetailPanel({ task, updateTask, onBack, card, currentUser }) {
           mentionedUserId: user.id,
           mentionedByUserId: currentUser.id,
           commentText: text,
+          sender_id: currentUser.id,
+          recipient_id: user.id,
         }),
       }).catch(() => {})
     }
@@ -234,7 +235,7 @@ function TaskDetailPanel({ task, updateTask, onBack, card, currentUser }) {
   function postLink() {
     const url = linkUrl.trim()
     if (!url) return
-    updateTask(task.id, { comments: [...comments, { id: uid(), type: 'link', url, label: linkLabel.trim() || url, authorId: ME.id, createdAt: now() }] })
+    updateTask(task.id, { comments: [...comments, { id: uid(), type: 'link', url, label: linkLabel.trim() || url, authorId: currentUser?.id, createdAt: now() }] })
     setLinkUrl(''); setLinkLabel(''); setShowLinkInput(false)
   }
 
@@ -300,7 +301,7 @@ function TaskDetailPanel({ task, updateTask, onBack, card, currentUser }) {
                 </div>
               )}
               {comments.map(c => {
-                const user = USERS.find(u => u.id === c.authorId)
+                const user = (allUsers || []).find(u => u.id === c.authorId)
                 const isLink = c.type === 'link'
                 return (
                   <div key={c.id} style={{ display: 'flex', gap: 8 }}>
@@ -356,6 +357,7 @@ function TaskDetailPanel({ task, updateTask, onBack, card, currentUser }) {
                 onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) postComment() }}
                 placeholder="Ask for an update… (⌘↵ to send, type @ to mention)"
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${BORDER}`, fontSize: 12, outline: 'none', resize: 'none', fontFamily: 'inherit', lineHeight: 1.5, color: T1, boxSizing: 'border-box', background: WHITE, transition: 'border-color 0.12s' }}
+                allUsers={allUsers}
               />
               <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                 <button
@@ -437,20 +439,19 @@ function MoveDropdown({ columns, currentColId, onMove, onClose }) {
 }
 
 // ─── Share modal ──────────────────────────────────────────────────────────────
-function ShareModal({ cardId, shares, currentUser, onClose }) {
+function ShareModal({ cardId, shares, currentUser, allUsers, onClose, setState }) {
   const cardShares = (shares || []).filter(s => s.card_id === cardId)
   const sharedUserIds = new Set(cardShares.map(s => s.user_id))
   const [selected, setSelected] = useState(new Set(sharedUserIds))
   const [saving, setSaving] = useState(false)
 
-  const eligibleUsers = USERS.filter(u => u.id !== currentUser?.id)
+  const eligibleUsers = (allUsers || []).filter(u => u.id !== currentUser?.id)
 
   async function handleSave() {
     setSaving(true)
-    // Add new shares
     const toAdd = [...selected].filter(id => !sharedUserIds.has(id))
-    // Remove unselected
     const toRemove = [...sharedUserIds].filter(id => !selected.has(id))
+
     if (toAdd.length > 0) {
       await fetch('/api/shares', {
         method: 'POST',
@@ -461,6 +462,23 @@ function ShareModal({ cardId, shares, currentUser, onClose }) {
     for (const uid of toRemove) {
       await fetch(`/api/shares?cardId=${cardId}&userId=${uid}`, { method: 'DELETE' }).catch(() => {})
     }
+
+    // Update local state immediately so UI reflects change without waiting for next poll
+    if (setState) {
+      setState(s => {
+        let shares = s.shares || []
+        // Add new
+        for (const uid of toAdd) {
+          if (!shares.find(sh => sh.card_id === cardId && sh.user_id === uid)) {
+            shares = [...shares, { card_id: cardId, user_id: uid, shared_by: currentUser?.id }]
+          }
+        }
+        // Remove
+        shares = shares.filter(sh => !(sh.card_id === cardId && toRemove.includes(sh.user_id)))
+        return { ...s, shares }
+      })
+    }
+
     setSaving(false)
     onClose()
   }
@@ -509,7 +527,7 @@ function ShareModal({ cardId, shares, currentUser, onClose }) {
 }
 
 // ─── @mention autocomplete ────────────────────────────────────────────────────
-function MentionTextarea({ value, onChange, onKeyDown, placeholder, style }) {
+function MentionTextarea({ value, onChange, onKeyDown, placeholder, style, allUsers }) {
   const [showDropdown, setShowDropdown] = useState(false)
   const [query, setQuery] = useState('')
   const [atPos, setAtPos] = useState(-1)
@@ -541,7 +559,7 @@ function MentionTextarea({ value, onChange, onKeyDown, placeholder, style }) {
     ref.current.focus()
   }
 
-  const filtered = USERS.filter(u => u.name.toLowerCase().startsWith(query.toLowerCase()) || u.name.split(' ')[0].toLowerCase().startsWith(query.toLowerCase()))
+  const filtered = (allUsers || []).filter(u => u.name.toLowerCase().startsWith(query.toLowerCase()) || u.name.split(' ')[0].toLowerCase().startsWith(query.toLowerCase()))
 
   return (
     <div style={{ position: 'relative' }}>
@@ -577,7 +595,7 @@ function MentionTextarea({ value, onChange, onKeyDown, placeholder, style }) {
 }
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
-export default function CardDrawer({ cardId, state, updateCard, updateTask, addTask, deleteCard, onClose, currentUser }) {
+export default function CardDrawer({ cardId, state, updateCard, updateTask, addTask, deleteCard, onClose, currentUser, allUsers, shareCard, unshareCard, setState }) {
   const [mounted, setMounted] = useState(false)
   const [activeTaskId, setActiveTaskId] = useState(null)
   const [selectedTaskId, setSelectedTaskId] = useState(null)
@@ -733,7 +751,7 @@ export default function CardDrawer({ cardId, state, updateCard, updateTask, addT
                   style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: showShare ? '#EEF3FF' : 'transparent', fontSize: 12, fontWeight: 700, color: showShare ? NAVY : TM, cursor: 'pointer' }}>
                   <IShare s={13} /> Share
                 </button>
-                {showShare && <ShareModal cardId={cardId} shares={state.shares || []} currentUser={currentUser} onClose={() => setShowShare(false)} />}
+                {showShare && <ShareModal cardId={cardId} shares={state.shares || []} currentUser={currentUser} allUsers={allUsers} setState={setState} onClose={() => setShowShare(false)} />}
               </div>
 
               <button onClick={handleMarkDone}
@@ -769,7 +787,7 @@ export default function CardDrawer({ cardId, state, updateCard, updateTask, addT
 
             {/* Meta row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              {card.assigneeId && <Av userId={card.assigneeId} size={22} />}
+              {card.assigneeId && <Av userId={card.assigneeId} size={22} allUsers={allUsers} />}
               {card.dueDate && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: isOverdue(card.dueDate) ? '#DC2626' : TM }}>
                   <ICalendar s={12} />{formatDate(card.dueDate)}
@@ -843,6 +861,7 @@ export default function CardDrawer({ cardId, state, updateCard, updateTask, addT
                 onBack={() => setSelectedTaskId(null)}
                 card={card}
                 currentUser={currentUser}
+                allUsers={allUsers}
               />
             ) : (
               <EmptyPanel />
