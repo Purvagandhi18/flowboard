@@ -457,7 +457,7 @@ function CompletedSection({ cards, columns, tasks, onRestore, onDelete, onOpen }
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
-export default function Dashboard({ state, setState, updateCard, addCard, addColumn, deleteCard, openCard, currentUser, isManager }) {
+export default function Dashboard({ state, setState, updateCard, addCard, addColumn, deleteCard, openCard, persistCards, currentUser, isManager }) {
   const [activeItem, setActiveItem] = useState(null)
   const [filters, setFilters] = useState({ priority: false, overdue: false, assignee: null })
 
@@ -489,7 +489,12 @@ export default function Dashboard({ state, setState, updateCard, addCard, addCol
   }
 
   function onRenameColumn(colId, title) {
-    setState(s => ({ ...s, columns: s.columns.map(c => c.id === colId ? { ...c, title } : c) }))
+    setState(s => {
+      const columns = s.columns.map(c => c.id === colId ? { ...c, title } : c)
+      const col = columns.find(c => c.id === colId)
+      if (col) fetch('/api/columns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(col) }).catch(() => {})
+      return { ...s, columns }
+    })
   }
 
   function onDeleteColumn(colId) {
@@ -534,13 +539,14 @@ export default function Dashboard({ state, setState, updateCard, addCard, addCol
         const from = colCards.findIndex(c => c.id === active.id)
         const to   = colCards.findIndex(c => c.id === over.id)
         const reordered = arrayMove(colCards, from, to)
-        setState(s => ({
-          ...s,
-          cards: s.cards.map(c => {
+        setState(s => {
+          const cards = s.cards.map(c => {
             const idx = reordered.findIndex(r => r.id === c.id)
             return idx >= 0 ? { ...c, position: idx * 1000 } : c
           })
-        }))
+          persistCards?.(cards.filter(c => reordered.some(r => r.id === c.id)))
+          return { ...s, cards }
+        })
       }
     }
   }

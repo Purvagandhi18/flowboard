@@ -1,6 +1,26 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { loadState, saveState, USERS } from './data.js'
+import { USERS } from './data.js'
 import { NAVY, NAVY_BG, CREAM, WHITE, BORDER, T1, T2, TM, SH_MD, uid, now, initials } from './tokens.jsx'
+
+const EMPTY_STATE = { columns: [], cards: [], tasks: [], reminders: [] }
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  })
+  if (!res.ok) throw new Error(`API ${path} failed: ${res.status}`)
+  return res.json()
+}
+
+function persist(path, method, body) {
+  apiFetch(path, { method, body }).catch(err => console.error('persist failed', err))
+}
+
+function persistDelete(path) {
+  fetch(path, { method: 'DELETE' }).catch(err => console.error('delete failed', err))
+}
 import { IBoard, IStar, IBell, IFlag, ISummary, ISettings, ILogout, ISearch, IZap, IX, ICheck } from './tokens.jsx'
 import Dashboard from './Dashboard.jsx'
 import CardDrawer from './CardDrawer.jsx'
@@ -205,7 +225,8 @@ function Sidebar({ section, setSection, state, currentUser, setCurrentUserId }) 
 
 // ── App shell ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [state, setState] = useState(() => loadState())
+  const [state, setState] = useState(EMPTY_STATE)
+  const [loading, setLoading] = useState(true)
   const [section, setSection] = useState('dashboard')
   const [openCardId, setOpenCardId] = useState(null)
   const [activeReminder, setActiveReminder] = useState(null)
@@ -221,7 +242,12 @@ export default function App() {
     localStorage.setItem('flowboard_user', id)
   }
 
-  useEffect(() => { saveState(state) }, [state])
+  // Load all data from Neon on mount
+  useEffect(() => {
+    apiFetch('/api/state')
+      .then(data => { setState(data); setLoading(false) })
+      .catch(err => { console.error('Failed to load state:', err); setLoading(false) })
+  }, [])
 
   // Show reminder popup after 4s if there's an active one due today
   useEffect(() => {
@@ -234,31 +260,37 @@ export default function App() {
   }, [])
 
   const updateCard = useCallback((id, updates) => {
-    setState(s => ({ ...s, cards: s.cards.map(c => c.id === id ? { ...c, ...updates, updatedAt: now() } : c) }))
+    setState(s => {
+      const cards = s.cards.map(c => c.id === id ? { ...c, ...updates, updatedAt: now() } : c)
+      const updated = cards.find(c => c.id === id)
+      if (updated) persist('/api/cards', 'POST', updated)
+      return { ...s, cards }
+    })
   }, [])
 
   const updateTask = useCallback((id, updates) => {
     if (updates._deleted) {
-      setState(s => ({ ...s, tasks: s.tasks.filter(t => t.id !== id) }))
+      setState(s => { persistDelete(`/api/tasks?id=${id}`); return { ...s, tasks: s.tasks.filter(t => t.id !== id) } })
     } else {
       setState(s => {
         const updatedTask = { ...s.tasks.find(t => t.id === id), ...updates }
         const tasks = s.tasks.map(t => t.id === id ? {
           ...t, ...updates,
-          // Track when a task gets completed
           ...(updates.status === 'done' && t.status !== 'done' ? { completedAt: now() } : {}),
-          // Clear completedAt if un-done
           ...(updates.status && updates.status !== 'done' ? { completedAt: null } : {}),
         } : t)
 
-        // Sync priorityFlag to parent card when task priority changes
         let cards = s.cards
         if ('priority' in updates) {
           const projectId = updatedTask.projectId
           const anyPriority = tasks.some(t => t.projectId === projectId && t.priority)
           cards = s.cards.map(c => c.id === projectId ? { ...c, priorityFlag: anyPriority } : c)
+          const updatedCard = cards.find(c => c.id === projectId)
+          if (updatedCard) persist('/api/cards', 'POST', updatedCard)
         }
 
+        const saved = tasks.find(t => t.id === id)
+        if (saved) persist('/api/tasks', 'POST', saved)
         return { ...s, tasks, cards }
       })
     }
@@ -270,34 +302,49 @@ export default function App() {
       dueDate: dueDate || null, tags: [], priorityFlag: false, done: false,
       position: Date.now(), createdAt: now(), updatedAt: now(), comments: [], links: [], attachments: [],
     }
+    persist('/api/cards', 'POST', card)
     setState(s => ({ ...s, cards: [...s.cards, card] }))
     return card.id
   }, [currentUserId])
 
   const addTask = useCallback((projectId, title, status = 'to_be_picked') => {
     const task = { id: uid(), projectId, title, description: '', status, assigneeId: null, dueDate: null, tags: [], position: Date.now(), createdAt: now(), priority: false }
+    persist('/api/tasks', 'POST', task)
     setState(s => ({ ...s, tasks: [...s.tasks, task] }))
   }, [])
 
   const deleteCard = useCallback((id) => {
-    setState(s => ({ ...s, cards: s.cards.filter(c => c.id !== id), tasks: s.tasks.filter(t => t.projectId !== id) }))
+    persistDelete(`/api/cards?id=${id}`)
+    setState(s => {
+      s.tasks.filter(t => t.projectId === id).forEach(t => persistDelete(`/api/tasks?id=${t.id}`))
+      return { ...s, cards: s.cards.filter(c => c.id !== id), tasks: s.tasks.filter(t => t.projectId !== id) }
+    })
   }, [])
 
   const addColumn = useCallback((title) => {
     const ACCENTS = ['#6B7280','#2563EB','#7C3AED','#D97706','#DC2626','#059669']
     const col = { id: uid(), title, accent: ACCENTS[state.columns.length % ACCENTS.length], position: state.columns.length }
+    persist('/api/columns', 'POST', col)
     setState(s => ({ ...s, columns: [...s.columns, col] }))
   }, [state.columns.length])
 
   const addReminder = useCallback((reminder) => {
-    setState(s => ({ ...s, reminders: [...s.reminders, { id: uid(), ...reminder, createdAt: now() }] }))
+    const r = { id: uid(), ...reminder, createdAt: now() }
+    persist('/api/reminders', 'POST', r)
+    setState(s => ({ ...s, reminders: [...s.reminders, r] }))
   }, [])
 
   const updateReminder = useCallback((id, updates) => {
-    setState(s => ({ ...s, reminders: s.reminders.map(r => r.id === id ? { ...r, ...updates } : r) }))
+    setState(s => {
+      const reminders = s.reminders.map(r => r.id === id ? { ...r, ...updates } : r)
+      const updated = reminders.find(r => r.id === id)
+      if (updated) persist('/api/reminders', 'POST', updated)
+      return { ...s, reminders }
+    })
   }, [])
 
   const deleteReminder = useCallback((id) => {
+    persistDelete(`/api/reminders?id=${id}`)
     setState(s => ({ ...s, reminders: s.reminders.filter(r => r.id !== id) }))
   }, [])
 
@@ -305,7 +352,21 @@ export default function App() {
     setOpenCardId(id)
   }, [])
 
-  const sharedProps = { state, setState, updateCard, updateTask, addCard, addTask, deleteCard, addColumn, openCard, currentUser, isManager }
+  // Called by Dashboard after same-column drag reorder
+  const persistCards = useCallback((cards) => {
+    cards.forEach(card => persist('/api/cards', 'POST', card))
+  }, [])
+
+  const sharedProps = { state, setState, updateCard, updateTask, addCard, addTask, deleteCard, addColumn, openCard, persistCards, currentUser, isManager }
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: CREAM, flexDirection: 'column', gap: 12 }}>
+      <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${NAVY} 0%, #2563EB 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(27,53,87,0.3)' }}>
+        <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.5 12L13 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </div>
+      <div style={{ fontSize: 13, color: TM, fontWeight: 500 }}>Loading FlowBoard…</div>
+    </div>
+  )
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: CREAM, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,sans-serif' }}>
