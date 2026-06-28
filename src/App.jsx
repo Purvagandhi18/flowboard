@@ -109,42 +109,58 @@ function ReminderPopup({ reminder, onDismiss, onSnooze }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
+const SIDE_BG   = '#0F1729'   // dark navy
+const SIDE_HOVER = 'rgba(255,255,255,0.07)'
+const SIDE_ACTIVE = 'rgba(99,102,241,0.25)'
+const SIDE_ACTIVE_COLOR = '#818CF8'
+const SIDE_TEXT = 'rgba(255,255,255,0.55)'
+const SIDE_BORDER = 'rgba(255,255,255,0.08)'
+
 function Sidebar({ section, setSection, state, currentUser, setCurrentUserId, unreadMentions }) {
   const reminderCount = (state.reminders || []).filter(r => r.status === 'active').length
   const priorityCount = (state.cards || []).filter(c => c.priorityFlag && !c.done).length
   const completedCount = (state.cards || []).filter(c => c.done).length
-  const [hover, setHover] = useState(null)
+  const [expanded, setExpanded] = useState(false)
+  const [hovNav, setHovNav] = useState(null)
   const [showUserSwitch, setShowUserSwitch] = useState(false)
   const isManager = currentUser?.role === 'manager'
 
+  const W = expanded ? 220 : 60
+
   return (
-    <aside style={{
-      width: 220, flexShrink: 0, background: WHITE, borderRight: `1px solid ${BORDER}`,
-      display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden',
-    }}>
+    <aside
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => { setExpanded(false); setShowUserSwitch(false) }}
+      style={{
+        width: W, flexShrink: 0, background: SIDE_BG,
+        display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden',
+        transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)',
+        zIndex: 100, position: 'relative',
+      }}>
+
       {/* Logo */}
-      <div style={{ padding: '18px 18px 14px', borderBottom: `1px solid ${BORDER}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 10,
-            background: `linear-gradient(135deg, ${NAVY} 0%, #2563EB 100%)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(27,53,87,0.35)',
-          }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M3 8.5L6.5 12L13 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <circle cx="8" cy="8" r="6.5" stroke="white" strokeWidth="1" opacity="0.3"/>
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 900, color: T1, letterSpacing: '-0.5px', lineHeight: 1.2 }}>FlowBoard</div>
-            <div style={{ fontSize: 9, color: TM, fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase' }}>Mosaic Wellness</div>
-          </div>
+      <div style={{ padding: expanded ? '18px 16px 14px' : '18px 0 14px', borderBottom: `1px solid ${SIDE_BORDER}`, display: 'flex', alignItems: 'center', justifyContent: expanded ? 'flex-start' : 'center', gap: 10, transition: 'padding 0.22s', flexShrink: 0 }}>
+        <div style={{
+          width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+          background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 2px 12px rgba(99,102,241,0.5)',
+        }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M3 8.5L6.5 12L13 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx="8" cy="8" r="6.5" stroke="white" strokeWidth="1" opacity="0.3"/>
+          </svg>
         </div>
+        {expanded && (
+          <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 14, fontWeight: 900, color: WHITE, letterSpacing: '-0.5px', lineHeight: 1.2 }}>FlowBoard</div>
+            <div style={{ fontSize: 9, color: SIDE_TEXT, fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase' }}>Mosaic Wellness</div>
+          </div>
+        )}
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '10px 10px 0', overflowY: 'auto' }}>
+      <nav style={{ flex: 1, padding: expanded ? '10px 8px 0' : '10px 6px 0', overflowY: 'auto', overflowX: 'hidden', transition: 'padding 0.22s' }}>
         {NAV.map(({ id, label, Icon }) => {
           const active = section === id
           const badge = id === 'reminders' ? reminderCount : id === 'priority' ? priorityCount : id === 'completed' ? completedCount : id === 'threads' ? unreadMentions : 0
@@ -152,73 +168,77 @@ function Sidebar({ section, setSection, state, currentUser, setCurrentUserId, un
             <button
               key={id}
               onClick={() => setSection(id)}
-              onMouseEnter={() => setHover(id)}
-              onMouseLeave={() => setHover(null)}
+              onMouseEnter={() => setHovNav(id)}
+              onMouseLeave={() => setHovNav(null)}
+              title={!expanded ? label : undefined}
               style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: 9,
-                padding: '9px 10px', borderRadius: 8, border: 'none',
-                background: active ? NAVY_BG : hover === id ? '#F5F4F2' : 'transparent',
-                color: active ? NAVY : T2, cursor: 'pointer', textAlign: 'left',
-                marginBottom: 2, transition: 'all 0.12s ease', fontWeight: active ? 700 : 500,
-                fontSize: 13, position: 'relative',
+                width: '100%', display: 'flex', alignItems: 'center',
+                gap: expanded ? 10 : 0,
+                justifyContent: expanded ? 'flex-start' : 'center',
+                padding: expanded ? '9px 10px' : '9px 0',
+                borderRadius: 10, border: 'none',
+                background: active ? SIDE_ACTIVE : hovNav === id ? SIDE_HOVER : 'transparent',
+                color: active ? SIDE_ACTIVE_COLOR : SIDE_TEXT,
+                cursor: 'pointer', textAlign: 'left', marginBottom: 2,
+                transition: 'all 0.12s ease',
+                fontWeight: active ? 700 : 500, fontSize: 13,
+                position: 'relative', whiteSpace: 'nowrap', overflow: 'hidden',
               }}>
-              {active && (
-                <div style={{ position: 'absolute', left: 0, top: '20%', bottom: '20%', width: 3, background: NAVY, borderRadius: '0 3px 3px 0' }} />
+              <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center', color: active ? SIDE_ACTIVE_COLOR : SIDE_TEXT }}>
+                <Icon s={17} />
+              </span>
+              {expanded && <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', color: active ? SIDE_ACTIVE_COLOR : 'rgba(255,255,255,0.75)' }}>{label}</span>}
+              {expanded && badge > 0 && (
+                <span style={{ background: active ? SIDE_ACTIVE_COLOR : 'rgba(255,255,255,0.15)', color: active ? SIDE_BG : WHITE, fontSize: 10, fontWeight: 700, borderRadius: 10, padding: '1px 6px', minWidth: 18, textAlign: 'center', flexShrink: 0 }}>{badge}</span>
               )}
-              <Icon s={16} />
-              <span style={{ flex: 1 }}>{label}</span>
-              {badge > 0 && (
-                <span style={{ background: active ? NAVY : '#E8E6E1', color: active ? WHITE : TM, fontSize: 10, fontWeight: 700, borderRadius: 10, padding: '1px 6px', minWidth: 18, textAlign: 'center' }}>{badge}</span>
+              {!expanded && badge > 0 && (
+                <div style={{ position: 'absolute', top: 6, right: 8, width: 7, height: 7, borderRadius: '50%', background: '#818CF8', border: `1.5px solid ${SIDE_BG}` }} />
               )}
             </button>
           )
         })}
       </nav>
 
-      {/* Role badge */}
-      {isManager && (
-        <div style={{ margin: '0 10px 8px', padding: '5px 10px', borderRadius: 7, background: '#EEF2F8', border: `1px solid ${BORDER}`, fontSize: 10, fontWeight: 700, color: NAVY, textAlign: 'center', letterSpacing: '0.3px' }}>
-          MANAGER VIEW — All cards visible
-        </div>
-      )}
-      {!isManager && (
-        <div style={{ margin: '0 10px 8px', padding: '5px 10px', borderRadius: 7, background: '#F9FAFB', border: `1px solid ${BORDER}`, fontSize: 10, fontWeight: 700, color: TM, textAlign: 'center', letterSpacing: '0.3px' }}>
-          MEMBER VIEW — Your cards only
+      {/* Role badge — only when expanded */}
+      {expanded && (
+        <div style={{ margin: '0 8px 8px', padding: '5px 10px', borderRadius: 7, background: isManager ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${SIDE_BORDER}`, fontSize: 10, fontWeight: 700, color: isManager ? SIDE_ACTIVE_COLOR : SIDE_TEXT, textAlign: 'center', letterSpacing: '0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {isManager ? 'MANAGER VIEW' : 'MEMBER VIEW'}
         </div>
       )}
 
       {/* User footer */}
-      <div style={{ padding: '12px 14px', borderTop: `1px solid ${BORDER}`, position: 'relative' }}>
-        {showUserSwitch && (
+      <div style={{ padding: expanded ? '12px 12px' : '12px 0', borderTop: `1px solid ${SIDE_BORDER}`, position: 'relative', display: 'flex', justifyContent: expanded ? 'flex-start' : 'center', transition: 'padding 0.22s' }}>
+        {expanded && showUserSwitch && (
           <div style={{
-            position: 'absolute', bottom: '100%', left: 10, right: 10, marginBottom: 6,
-            background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 10,
-            boxShadow: SH_MD, overflow: 'hidden', maxHeight: 240, overflowY: 'auto',
+            position: 'absolute', bottom: '100%', left: 8, right: 8, marginBottom: 6,
+            background: '#1A2540', border: `1px solid ${SIDE_BORDER}`, borderRadius: 10,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)', overflow: 'hidden', maxHeight: 240, overflowY: 'auto',
           }}>
-            <div style={{ padding: '8px 10px', fontSize: 10, fontWeight: 800, color: TM, textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: `1px solid ${BORDER}` }}>Switch user</div>
+            <div style={{ padding: '8px 10px', fontSize: 10, fontWeight: 800, color: SIDE_TEXT, textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: `1px solid ${SIDE_BORDER}` }}>Switch user</div>
             {USERS.map(u => (
               <button key={u.id} onClick={() => { setCurrentUserId(u.id); setShowUserSwitch(false) }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: 'none', background: u.id === currentUser?.id ? '#F0F4FF' : 'transparent', cursor: 'pointer', textAlign: 'left', borderBottom: `1px solid ${BORDER}` }}>
-                <div style={{ width: 24, height: 24, borderRadius: '50%', background: u.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: WHITE, flexShrink: 0 }}>{initials(u.name)}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: T1 }}>{u.name}</div>
-                  <div style={{ fontSize: 9, color: TM, textTransform: 'capitalize' }}>{u.role}</div>
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: 'none', background: u.id === currentUser?.id ? 'rgba(99,102,241,0.2)' : 'transparent', cursor: 'pointer', textAlign: 'left', borderBottom: `1px solid ${SIDE_BORDER}` }}>
+                <div style={{ width: 26, height: 26, borderRadius: '50%', background: u.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: WHITE, flexShrink: 0 }}>{initials(u.name)}</div>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: WHITE, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
+                  <div style={{ fontSize: 9, color: SIDE_TEXT, textTransform: 'capitalize' }}>{u.role}</div>
                 </div>
-                {u.id === currentUser?.id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: NAVY }} />}
+                {u.id === currentUser?.id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: SIDE_ACTIVE_COLOR, flexShrink: 0 }} />}
               </button>
             ))}
           </div>
         )}
 
-        <button onClick={() => setShowUserSwitch(s => !s)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-          <div style={{ width: 30, height: 30, borderRadius: '50%', background: currentUser?.color || NAVY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: WHITE, flexShrink: 0 }}>
+        <button onClick={() => setShowUserSwitch(s => !s)} style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', cursor: 'pointer', padding: 0, maxWidth: '100%' }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: currentUser?.color || NAVY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: WHITE, flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)' }}>
             {initials(currentUser?.name || 'U')}
           </div>
-          <div style={{ flex: 1, overflow: 'hidden', textAlign: 'left' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: T1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser?.name || 'Unknown'}</div>
-            <div style={{ fontSize: 10, color: TM, textTransform: 'capitalize' }}>{currentUser?.role || 'member'}</div>
-          </div>
-          <ISettings s={14} style={{ color: TM }} />
+          {expanded && (
+            <div style={{ flex: 1, overflow: 'hidden', textAlign: 'left' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: WHITE, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser?.name || 'Unknown'}</div>
+              <div style={{ fontSize: 10, color: SIDE_TEXT, textTransform: 'capitalize' }}>{currentUser?.role || 'member'}</div>
+            </div>
+          )}
         </button>
       </div>
     </aside>
