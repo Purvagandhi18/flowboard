@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { GoogleOAuthProvider } from '@react-oauth/google'
 import { USERS } from './data.js'
 import { NAVY, NAVY_BG, CREAM, WHITE, BORDER, T1, T2, TM, SH_MD, uid, now, initials } from './tokens.jsx'
+import Login from './Login.jsx'
+
+const GOOGLE_CLIENT_ID = '872475714616-hrv0ht6b4a5ls7qpp4j2rpd56tlg5pcr.apps.googleusercontent.com'
 
 const EMPTY_STATE = { columns: [], cards: [], tasks: [], reminders: [], shares: [] }
 
@@ -212,27 +216,23 @@ function Sidebar({ section, setSection, state, currentUser, setCurrentUserId, un
           <div style={{
             position: 'absolute', bottom: '100%', left: 8, right: 8, marginBottom: 6,
             background: '#1A2540', border: `1px solid ${SIDE_BORDER}`, borderRadius: 10,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.4)', overflow: 'hidden', maxHeight: 240, overflowY: 'auto',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)', overflow: 'hidden',
           }}>
-            <div style={{ padding: '8px 10px', fontSize: 10, fontWeight: 800, color: SIDE_TEXT, textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: `1px solid ${SIDE_BORDER}` }}>Switch user</div>
-            {USERS.map(u => (
-              <button key={u.id} onClick={() => { setCurrentUserId(u.id); setShowUserSwitch(false) }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: 'none', background: u.id === currentUser?.id ? 'rgba(99,102,241,0.2)' : 'transparent', cursor: 'pointer', textAlign: 'left', borderBottom: `1px solid ${SIDE_BORDER}` }}>
-                <div style={{ width: 26, height: 26, borderRadius: '50%', background: u.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: WHITE, flexShrink: 0 }}>{initials(u.name)}</div>
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: WHITE, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
-                  <div style={{ fontSize: 9, color: SIDE_TEXT, textTransform: 'capitalize' }}>{u.role}</div>
-                </div>
-                {u.id === currentUser?.id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: SIDE_ACTIVE_COLOR, flexShrink: 0 }} />}
-              </button>
-            ))}
+            <button onClick={() => { setShowUserSwitch(false); setCurrentUserId(null) }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', color: '#F87171' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Sign out</span>
+            </button>
           </div>
         )}
 
         <button onClick={() => setShowUserSwitch(s => !s)} style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', cursor: 'pointer', padding: 0, maxWidth: '100%' }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: currentUser?.color || NAVY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: WHITE, flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)' }}>
-            {initials(currentUser?.name || 'U')}
-          </div>
+          {currentUser?.picture
+            ? <img src={currentUser.picture} alt="" style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)', objectFit: 'cover' }} />
+            : <div style={{ width: 32, height: 32, borderRadius: '50%', background: currentUser?.color || NAVY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: WHITE, flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)' }}>
+                {initials(currentUser?.name || 'U')}
+              </div>
+          }
           {expanded && (
             <div style={{ flex: 1, overflow: 'hidden', textAlign: 'left' }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: WHITE, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser?.name || 'Unknown'}</div>
@@ -246,23 +246,30 @@ function Sidebar({ section, setSection, state, currentUser, setCurrentUserId, un
 }
 
 // ── App shell ─────────────────────────────────────────────────────────────────
-export default function App() {
+function AppInner() {
+  const [session, setSession] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('flowboard_session')) } catch { return null }
+  })
   const [state, setState] = useState(EMPTY_STATE)
   const [loading, setLoading] = useState(true)
   const [section, setSection] = useState('dashboard')
   const [openCardId, setOpenCardId] = useState(null)
   const [activeReminder, setActiveReminder] = useState(null)
   const [mentions, setMentions] = useState([])
-  const [currentUserId, setCurrentUserIdRaw] = useState(() => {
-    return localStorage.getItem('flowboard_user') || 'u1'
-  })
 
-  const currentUser = USERS.find(u => u.id === currentUserId) || USERS[0]
-  const isManager = currentUser?.role === 'manager'
+  const currentUser = session
+  const currentUserId = session?.id
+  const isManager = session?.role === 'manager'
 
-  function setCurrentUserId(id) {
-    setCurrentUserIdRaw(id)
-    localStorage.setItem('flowboard_user', id)
+  function setCurrentUserId(val) {
+    if (!val) {
+      localStorage.removeItem('flowboard_session')
+      setSession(null)
+    }
+  }
+
+  if (!session) {
+    return <Login onLogin={s => setSession(s)} />
   }
 
   // Load all data from Neon on mount
@@ -467,5 +474,13 @@ export default function App() {
 
       <ToastHost />
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <AppInner />
+    </GoogleOAuthProvider>
   )
 }
